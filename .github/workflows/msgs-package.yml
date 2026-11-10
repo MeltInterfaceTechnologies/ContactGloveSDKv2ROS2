@@ -1,0 +1,63 @@
+name: Standalone ROS2 messages
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-msgs:
+    name: Messages ${{ matrix.ros_distro }} (${{ matrix.codename }} amd64)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            ros_distro: humble
+            codename: jammy
+          - os: ubuntu-24.04
+            ros_distro: jazzy
+            codename: noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build messages without ContactGlove runtime
+        shell: bash
+        run: |
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD:/work" -w /work \
+            -e ROS_DISTRO=${{ matrix.ros_distro }} \
+            -e DEB_CODENAME=${{ matrix.codename }} \
+            -e PACKAGE_BUILD_ID=${{ github.run_id }}.${{ github.run_attempt }} \
+            ros:${{ matrix.ros_distro }}-ros-base bash -ec '
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                build-essential cmake dpkg-dev python3-colcon-common-extensions \
+                ros-${ROS_DISTRO}-ament-cmake-auto \
+                ros-${ROS_DISTRO}-rosidl-default-generators \
+                ros-${ROS_DISTRO}-geometry-msgs ros-${ROS_DISTRO}-std-msgs
+              source /opt/ros/${ROS_DISTRO}/setup.bash
+              bash scripts/package_ros2_msgs.sh "$ROS_DISTRO" "$DEB_CODENAME"
+            '
+      - name: Verify DEB in a fresh ROS image
+        shell: bash
+        run: |
+          shopt -s nullglob
+          debs=(dist/contactglove-ros2-msgs_*-1${{ matrix.codename }}+ros2.*_amd64.deb)
+          test "${#debs[@]}" -eq 1
+          # No source checkout or build tree in the consumer container.
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD/${debs[0]}:/tmp/contactglove-msgs.deb:ro" \
+            -v "$PWD/scripts/verify_ros2_msgs_deb_install.sh:/tmp/verify.sh:ro" \
+            ros:${{ matrix.ros_distro }}-ros-base \
+            bash /tmp/verify.sh ${{ matrix.ros_distro }} /tmp/contactglove-msgs.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contactglove-ros2-msgs-${{ matrix.ros_distro }}-amd64
+          path: dist/contactglove-ros2-msgs_*-1${{ matrix.codename }}+ros2.*_amd64.deb
+          if-no-files-found: error

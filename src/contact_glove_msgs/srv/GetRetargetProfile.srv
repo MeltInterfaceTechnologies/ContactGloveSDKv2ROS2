@@ -1,0 +1,16 @@
+# Query display metadata for a retarget profile from the currently connected DivingStation.
+# contact_glove_node assigns request IDs and correlates asynchronous responses.
+string profile_uuid
+---
+# Profile status from DivingStation Protocol v2 when a response was received.
+uint8 STATUS_FOUND=0
+uint8 STATUS_NOT_FOUND=1
+uint8 STATUS_INVALID_QUERY=2
+# Status added by the ROS 2 bridge when no DivingStation response was received.
+uint8 STATUS_TIMEOUT=3
+uint8 STATUS_SDK_REQUEST_REJECTED=4
+
+uint8 status
+string profile_uuid  # Queried UUID for FOUND / NOT_FOUND; empty for INVALID_QUERY and similar statuses
+string name          # Valid only for FOUND
+string description   # Valid only for FOUND

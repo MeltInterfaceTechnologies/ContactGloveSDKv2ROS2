@@ -1,0 +1,3 @@
+[submodule "vendor/contactglove-sdk-v2"]
+	path = vendor/contactglove-sdk-v2
+	url = https://github.com/MeltInterfaceTechnologies/ContactGloveSDKv2Cpp.git

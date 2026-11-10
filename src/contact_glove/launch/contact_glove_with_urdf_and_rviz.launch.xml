@@ -1,0 +1,114 @@
+<launch>
+  <arg name="namespace"     default="contact_glove"/>
+  <!-- Namespace normalization for this rviz2 node. See the corresponding let
+       in contact_glove_with_urdf.launch.xml, including the fallback to
+       "contact_glove" for an empty normalized value. -->
+  <let name="namespace_clean"
+       value="$(eval &quot;'$(var namespace)'.strip('/') or 'contact_glove'&quot;)"/>
+  <arg name="ds_ip"            default="127.0.0.1"/>
+  <arg name="ds_port"          default="25791"/>
+  <arg name="receive_port"     default="25788"/>
+  <arg name="send_port"        default="0"/>
+  <arg name="timeout_duration" default="1000"/>
+  <arg name="retarget_profile_timeout_ms" default="1000"/>
+  <arg name="try_reconnect"    default="true"/>
+
+  <!-- Fixes the glove ID represented by left/joint_states or right/joint_states
+       when multiple gloves are connected on one side. The default empty value
+       selects automatically. See the identically named contact_glove.launch.xml
+       and contact_glove_node parameters. -->
+  <arg name="left_joint_state_glove_id"  default=""/>
+  <arg name="right_joint_state_glove_id" default=""/>
+
+  <arg name="parent_frame_id" default="world"/>
+  <arg name="enable_rviz2"    default="true"/>
+  <!-- The two includes below receive enable_rviz2:=false so neither starts
+       RViz2. In ROS 2 launch XML, an arg value set inside include persists in
+       LaunchConfiguration after the include because parent and child scopes are
+       not isolated. Using $(var enable_rviz2) directly would therefore also
+       disable this file's RViz2 node at the end. Snapshot the value before the
+       includes and use that snapshot in the final node condition. -->
+  <let name="enable_rviz2_snapshot" value="$(var enable_rviz2)"/>
+
+  <!-- MarkerArray and 25-joint debug TF (contact_glove_rviz_node). -->
+  <arg name="publish_placeholder_wrist_tf" default="true"/>
+  <arg name="publish_joint_tf" default="false"/>
+  <arg name="marker_lifetime"  default="0.4"/>
+
+  <!-- URDF plus JointState (robot_state_publisher). -->
+  <arg name="hand" default="both"/>
+  <arg name="publish_wrist_placement" default="true"/>
+  <!-- Placeholder wrist-position tuning. Defaults and meanings match the
+       identically named arguments in contact_glove_with_urdf.launch.xml and
+       are forwarded to it unchanged. -->
+  <arg name="left_wrist_offset_x"    default="0.0"/>
+  <arg name="left_wrist_offset_y"    default="-0.15"/>
+  <arg name="left_wrist_offset_z"    default="0.0"/>
+  <arg name="left_wrist_offset_roll" default="3.141592653589793"/>
+  <arg name="right_wrist_offset_x"    default="0.0"/>
+  <arg name="right_wrist_offset_y"    default="0.15"/>
+  <arg name="right_wrist_offset_z"    default="0.0"/>
+  <arg name="right_wrist_offset_roll" default="0.0"/>
+
+  <!-- This launch file starts the SDK driver contact_glove_node exactly once.
+       It calls contact_glove_with_rviz.launch.xml and
+       contact_glove_with_urdf.launch.xml with start_driver:=false, so their
+       included contact_glove.launch.xml drivers do not start. Starting a driver
+       independently from both files would create two contact_glove_node
+       instances that conflict when binding the same receive_port (25788 by
+       default). -->
+  <include file="$(find-pkg-share contact_glove)/launch/contact_glove.launch.xml">
+    <arg name="namespace"        value="$(var namespace_clean)"/>
+    <arg name="ds_ip"            value="$(var ds_ip)"/>
+    <arg name="ds_port"          value="$(var ds_port)"/>
+    <arg name="receive_port"     value="$(var receive_port)"/>
+    <arg name="send_port"        value="$(var send_port)"/>
+    <arg name="timeout_duration" value="$(var timeout_duration)"/>
+    <arg name="retarget_profile_timeout_ms" value="$(var retarget_profile_timeout_ms)"/>
+    <arg name="try_reconnect"    value="$(var try_reconnect)"/>
+    <arg name="left_joint_state_glove_id"  value="$(var left_joint_state_glove_id)"/>
+    <arg name="right_joint_state_glove_id" value="$(var right_joint_state_glove_id)"/>
+  </include>
+
+  <!-- Skeleton to MarkerArray plus 25-joint debug TF. This include starts
+       neither the driver nor RViz2; the include above owns the driver and the
+       single node below owns RViz2. -->
+  <include file="$(find-pkg-share contact_glove)/launch/contact_glove_with_rviz.launch.xml">
+    <arg name="namespace"    value="$(var namespace)"/>
+    <arg name="start_driver" value="false"/>
+    <arg name="enable_rviz2" value="false"/>
+    <arg name="parent_frame_id" value="$(var parent_frame_id)"/>
+    <arg name="publish_placeholder_wrist_tf" value="$(var publish_placeholder_wrist_tf)"/>
+    <arg name="publish_joint_tf" value="$(var publish_joint_tf)"/>
+    <arg name="marker_lifetime"  value="$(var marker_lifetime)"/>
+  </include>
+
+  <!-- JointState plus URDF to robot_state_publisher. This include starts
+       neither the driver nor RViz2 for the same reason as the include above. -->
+  <include file="$(find-pkg-share contact_glove)/launch/contact_glove_with_urdf.launch.xml">
+    <arg name="namespace"    value="$(var namespace)"/>
+    <arg name="start_driver" value="false"/>
+    <arg name="enable_rviz2" value="false"/>
+    <arg name="hand"             value="$(var hand)"/>
+    <arg name="parent_frame_id"  value="$(var parent_frame_id)"/>
+    <arg name="publish_wrist_placement" value="$(var publish_wrist_placement)"/>
+    <arg name="left_wrist_offset_x"    value="$(var left_wrist_offset_x)"/>
+    <arg name="left_wrist_offset_y"    value="$(var left_wrist_offset_y)"/>
+    <arg name="left_wrist_offset_z"    value="$(var left_wrist_offset_z)"/>
+    <arg name="left_wrist_offset_roll" value="$(var left_wrist_offset_roll)"/>
+    <arg name="right_wrist_offset_x"    value="$(var right_wrist_offset_x)"/>
+    <arg name="right_wrist_offset_y"    value="$(var right_wrist_offset_y)"/>
+    <arg name="right_wrist_offset_z"    value="$(var right_wrist_offset_z)"/>
+    <arg name="right_wrist_offset_roll" value="$(var right_wrist_offset_roll)"/>
+  </include>
+
+  <!-- RViz2 preset combining MarkerArray, 25-joint debug TF, and URDF
+       RobotModel in one window. -f sets Fixed Frame to parent_frame_id. The
+       bundled RViz RobotModel TF Prefix is configured for the default
+       "contact_glove" namespace. See the RViz2 node comment in
+       contact_glove_with_urdf.launch.xml when overriding namespace:=.... -->
+  <node pkg="rviz2" exec="rviz2" name="rviz2" namespace="$(var namespace_clean)" output="screen"
+        args="-d $(find-pkg-share contact_glove)/config/contact_glove_combined.rviz
+              -f $(var parent_frame_id)"
+        if="$(var enable_rviz2_snapshot)"/>
+</launch>

@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+  Copyright (c) 2026 Melt Interface Technologies Inc.
+  SPDX-License-Identifier: Apache-2.0
+
+  ContactGlove left-hand model. Joint names follow
+  "left_<finger>_<field>_joint" and match the name field of the
+  left/joint_states (sensor_msgs/JointState) topic published by contact_glove_node.
+  See contact_glove_hand_macro.xacro for joint-origin, axis, and joint-limit conventions.
+  The numeric parameters are derived by reflecting the Z coordinates of the measured reference
+  points and running the same geometry derivation. The left rest pose is verified as an exact
+  mirror of the right-hand rest pose.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="contact_glove_left_hand">
+  <xacro:include filename="contact_glove_hand_macro.xacro"/>
+  <xacro:contact_glove_hand prefix="left_" reflect="-1"
+    thumb_cmc_xyz="-0.025381 -0.008529 -0.015627" thumb_cmc_rpy="0.334048 -0.915860 -3.141593"
+    thumb_mcp_xyz="0.000000 0.000000 -0.035171" thumb_mcp_rpy="0.210768 -0.213154 -1.064962"
+    thumb_ip_xyz="-0.000000 0.000000 -0.022226" thumb_ip_rpy="0.036811 -0.075436 -0.018412"
+    index_tilt_xyz="-0.083161 0.016905 -0.024087" index_tilt_rpy="-0.033286 -1.494541 -3.141593"
+    index_pip_xyz="0.000000 0.000000 -0.030304" index_pip_rpy="0.301107 -0.102103 -0.003412"
+    index_dip_xyz="0.000000 0.000000 -0.022533" index_dip_rpy="0.180888 -0.048283 0.013251"
+    middle_tilt_xyz="-0.085536 0.023667 -0.006883" middle_tilt_rpy="-2.986293 -1.505030 0.000000"
+    middle_pip_xyz="0.000000 0.000000 -0.029532" middle_pip_rpy="0.146422 -0.026088 0.004085"
+    middle_dip_xyz="0.000000 0.000000 -0.026913" middle_dip_rpy="0.180227 -0.029346 0.009137"
+    ring_tilt_xyz="-0.079755 0.020956 0.011829" ring_tilt_rpy="-3.023948 -1.417839 -0.000000"
+    ring_pip_xyz="-0.000000 0.000000 -0.029291" ring_pip_rpy="0.328943 0.013233 -0.001564"
+    ring_dip_xyz="0.000000 0.000000 -0.019854" ring_dip_rpy="0.055291 -0.045314 0.021716"
+    little_tilt_xyz="-0.074475 0.016905 0.031042" little_tilt_rpy="-3.035639 -1.399894 0.000000"
+    little_pip_xyz="0.000000 -0.000000 -0.017978" little_pip_rpy="0.522659 -0.049843 0.005305"
+    little_dip_xyz="-0.000000 -0.000000 -0.020702" little_dip_rpy="0.189436 0.009989 -0.007264"/>
+</robot>

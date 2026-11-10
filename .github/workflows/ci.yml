@@ -1,0 +1,317 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # These checks need no repository secrets and run
+  # on fork pull requests as well as same-repository contributions.
+  non-secret-checks:
+    name: Non-secret checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test distribution payload checks
+        run: python3 -m unittest discover -s scripts -p 'test_verify_ros2_distribution.py' -v
+      - name: Test source provenance checks
+        run: python3 -m unittest discover -s scripts -p 'test_source_revisions.py' -v
+      - name: Test source snapshots and SDK compatibility contracts
+        run: python3 -m unittest discover -s scripts -p 'test_public_*.py' -v
+
+
+  # Test first, then package on the same runner to avoid a second ROS setup.
+  # package_ros2.sh still builds Release payloads in new temporary directories;
+  # the build/ and install/ trees used by the tests are never packaged.
+  build-and-test:
+    needs: non-secret-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            ros_distro: jazzy
+            deb_codename: noble
+          - os: ubuntu-22.04
+            ros_distro: humble
+            deb_codename: jammy
+
+    name: ROS2 ${{ matrix.ros_distro }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    env:
+      PACKAGE_BUILD_ID: ${{ github.run_id }}.${{ github.run_attempt }}
+    outputs:
+      artifact_id_jazzy: ${{ steps.handoff.outputs.artifact_id_jazzy }}
+      artifact_id_humble: ${{ steps.handoff.outputs.artifact_id_humble }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch pinned public C++ SDK without credentials
+        shell: bash
+        run: |
+          test "$(git config -f .gitmodules --get submodule.vendor/contactglove-sdk-v2.url)" = \
+            https://github.com/MeltInterfaceTechnologies/ContactGloveSDKv2Cpp.git
+          git submodule sync --recursive
+          anonymous_home="$(mktemp -d)"
+          trap 'rm -rf "$anonymous_home"' EXIT
+          env -u GH_TOKEN -u GITHUB_TOKEN -u GIT_ASKPASS -u SSH_ASKPASS \
+            HOME="$anonymous_home" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+            GIT_CONFIG_COUNT=0 GIT_TERMINAL_PROMPT=0 \
+            git -c credential.helper= -c core.askPass= -c http.extraHeader= \
+              submodule update --init --recursive
+          test "$(git -C vendor/contactglove-sdk-v2 rev-parse HEAD)" = \
+            "$(git ls-tree HEAD vendor/contactglove-sdk-v2 | awk '{print $3}')"
+
+      - name: Verify self-contained source snapshot
+        shell: bash
+        run: |
+          python3 scripts/create_source_archive.py "$RUNNER_TEMP/source.tar.gz"
+          mkdir "$RUNNER_TEMP/source-snapshot"
+          tar -xzf "$RUNNER_TEMP/source.tar.gz" -C "$RUNNER_TEMP/source-snapshot"
+          snapshot="$RUNNER_TEMP/source-snapshot/ContactGloveSDKv2ROS2-source"
+          python3 "$snapshot/scripts/source_revisions.py"
+          printf '\nchanged\n' >> "$snapshot/vendor/contactglove-sdk-v2/CMakeLists.txt"
+          if python3 "$snapshot/scripts/source_revisions.py"; then
+            echo 'modified source snapshot was accepted' >&2
+            exit 1
+          fi
+
+      - uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: ${{ matrix.ros_distro }}
+
+      - name: Verify workspace package discovery
+        shell: bash
+        run: |
+          packages="$(colcon list --names-only)"
+          grep -Fxq contact_glove <<< "$packages"
+          grep -Fxq contact_glove_msgs <<< "$packages"
+          if grep -Fxq ContactGloveSDKv2 <<< "$packages"; then
+            echo 'Native SDK must not be discovered as a colcon workspace package' >&2
+            exit 1
+          fi
+
+      - name: Install ROS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ros-${{ matrix.ros_distro }}-ament-cmake-auto \
+            ros-${{ matrix.ros_distro }}-ament-lint-auto \
+            ros-${{ matrix.ros_distro }}-ament-lint-common \
+            ros-${{ matrix.ros_distro }}-ament-cmake-gtest \
+            ros-${{ matrix.ros_distro }}-rosidl-default-generators \
+            ros-${{ matrix.ros_distro }}-rosidl-default-runtime \
+            ros-${{ matrix.ros_distro }}-rclcpp \
+            ros-${{ matrix.ros_distro }}-rclpy \
+            ros-${{ matrix.ros_distro }}-geometry-msgs \
+            ros-${{ matrix.ros_distro }}-std-msgs \
+            ros-${{ matrix.ros_distro }}-sensor-msgs \
+            ros-${{ matrix.ros_distro }}-visualization-msgs \
+            ros-${{ matrix.ros_distro }}-tf2-ros \
+            ros-${{ matrix.ros_distro }}-xacro \
+            ros-${{ matrix.ros_distro }}-robot-state-publisher \
+            ros-${{ matrix.ros_distro }}-rviz2 \
+            dpkg-dev \
+            zip \
+            unzip
+
+      - name: Build and stage pinned C++ SDK
+        shell: bash
+        run: |
+          bash scripts/build_cpp_sdk.sh ${{ matrix.deb_codename }} "$RUNNER_TEMP/sdk-package"
+          shopt -s nullglob
+          packages=("$RUNNER_TEMP"/sdk-package/*.deb)
+          test "${#packages[@]}" -eq 1
+          mkdir -p "$RUNNER_TEMP/sdk-prefix"
+          dpkg-deb -x "${packages[0]}" "$RUNNER_TEMP/sdk-prefix"
+          echo "SDK_BUILD_DIR=$RUNNER_TEMP/sdk-package" >> "$GITHUB_ENV"
+          echo "ContactGloveSDKv2_DIR=$RUNNER_TEMP/sdk-prefix/usr/lib/x86_64-linux-gnu/cmake/ContactGloveSDKv2" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/sdk-prefix/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
+
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.ros_distro }}/setup.bash
+          colcon build --event-handlers console_direct+ --cmake-args -DContactGloveSDKv2_DIR="$ContactGloveSDKv2_DIR"
+
+      - name: Test
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.ros_distro }}/setup.bash
+          colcon test --event-handlers console_direct+
+          colcon test-result --verbose
+
+      - name: Verify two-node retry and malformed-packet recovery
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.ros_distro }}/setup.bash
+          source install/setup.bash
+          timeout 45s python3 scripts/test_lan_retry.py \
+            install/contact_glove/lib/contact_glove/contact_glove_node
+
+      # check_urdf_joint_names_{left,right} (src/contact_glove/CMakeLists.txt) only get
+      # registered as tests when the xacro executable is found, so they silently
+      # disappear from the results instead of failing if `ros-xacro` is ever dropped from
+      # the apt install list above by mistake. ros-xacro IS installed on this job, so
+      # assert their result files actually exist instead of trusting that colcon test
+      # would have caught a silent skip.
+      - name: Verify xacro-dependent URDF joint name tests actually ran
+        shell: bash
+        run: |
+          for side in left right; do
+            f="build/contact_glove/test_results/contact_glove/check_urdf_joint_names_${side}.xml"
+            if [ ! -f "$f" ]; then
+              echo "::error::$f is missing - check_urdf_joint_names_${side} did not run" \
+                "(xacro executable not found?). This test must not be silently skipped in CI."
+              exit 1
+            fi
+          done
+
+      # Each step sources only the base ROS prefix. The test overlay from the
+      # previous steps is not carried into these clean packaging builds.
+      - name: Build distribution zip
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.ros_distro }}/setup.bash
+          bash scripts/package_ros2.sh ${{ matrix.ros_distro }} ${{ matrix.deb_codename }}
+
+      - name: Extract and verify all three DEBs from the actual ZIP
+        shell: bash
+        run: |
+          shopt -s nullglob
+          zip_files=(dist/ContactGloveSDKv2ROS2-*-${{ matrix.ros_distro }}-*.zip)
+          test "${#zip_files[@]}" -eq 1
+          python3 scripts/verify_ros2_distribution.py "${zip_files[0]}" \
+            ${{ matrix.ros_distro }} ${{ matrix.deb_codename }}
+          mkdir -p "${RUNNER_TEMP}/distribution-input"
+          unzip -j "${zip_files[0]}" '*.deb' -d "${RUNNER_TEMP}/distribution-input"
+
+
+
+      - name: Verify ZIP msgs alone in a fresh ROS image
+        shell: bash
+        run: |
+          docker run --rm --platform linux/amd64 \
+            -v "${RUNNER_TEMP}/distribution-input:/input:ro" \
+            -v "$PWD/scripts/verify_ros2_msgs_deb_install.sh:/tmp/verify.sh:ro" \
+            ros:${{ matrix.ros_distro }}-ros-base \
+            bash -ec 'bash /tmp/verify.sh ${{ matrix.ros_distro }} /input/contactglove-ros2-msgs_*.deb'
+
+      - name: Verify ZIP bridge lifecycle in a fresh ROS image
+        shell: bash
+        run: |
+          docker run --rm --platform linux/amd64 \
+            -v "${RUNNER_TEMP}/distribution-input:/input:ro" \
+            -v "$PWD/scripts:/verify:ro" \
+            ros:${{ matrix.ros_distro }}-ros-base \
+            bash -ec 'bash /verify/verify_ros2_deb_lifecycle.sh ${{ matrix.ros_distro }} \
+              /input/contactglove-ros2-bridge_*.deb /input/contactglove-ros2-msgs_*.deb \
+              /input/contactglove-sdk-v2_*.deb'
+
+      - name: Download checksum-pinned official C++ Release DEB
+        shell: bash
+        run: bash scripts/download_public_cpp_deb.sh ${{ matrix.deb_codename }} "$RUNNER_TEMP/official-sdk"
+
+      - name: Verify bridge lifecycle with the official C++ Release DEB
+        shell: bash
+        run: |
+          docker run --rm --platform linux/amd64 \
+            -v "${RUNNER_TEMP}/distribution-input:/input:ro" \
+            -v "${RUNNER_TEMP}/official-sdk:/official:ro" \
+            -v "$PWD/scripts:/verify:ro" \
+            ros:${{ matrix.ros_distro }}-ros-base \
+            bash -ec 'bash /verify/verify_ros2_deb_lifecycle.sh ${{ matrix.ros_distro }} \
+              /input/contactglove-ros2-bridge_*.deb /input/contactglove-ros2-msgs_*.deb \
+              /official/contactglove-sdk-v2_*.deb'
+
+
+      # These intermediate inputs are not the official APT artifact names. Each
+      # producer attempt gets a separate immutable artifact; consumers use its
+      # exact ID, even when only a failed Package job is rerun later.
+      - name: Checksum validated package for handoff
+        shell: bash
+        run: |
+          shopt -s nullglob
+          zip_files=(dist/ContactGloveSDKv2ROS2-*-${{ matrix.ros_distro }}-*.zip)
+          test "${#zip_files[@]}" -eq 1
+          (cd dist && sha256sum "${zip_files[0]#dist/}" > SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        id: package_input
+        with:
+          name: ci-package-input-${{ matrix.ros_distro }}-attempt-${{ github.run_attempt }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+      # Matrix outputs need distinct keys: each producer sets only its own
+      # distro's key, so their completion order cannot select the other ZIP.
+      - name: Export immutable package input ID
+        id: handoff
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.package_input.outputs.artifact-id }}
+          ROS_DISTRO: ${{ matrix.ros_distro }}
+        run: |
+          [[ "${ARTIFACT_ID}" =~ ^[1-9][0-9]*$ ]]
+          echo "artifact_id_${ROS_DISTRO}=${ARTIFACT_ID}" >> "${GITHUB_OUTPUT}"
+
+  # Preserve both the original Package check names and the all-distro success
+  # barrier. This job transfers verified bytes only; it needs no ROS setup.
+  package:
+    needs: build-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            ros_distro: jazzy
+            deb_codename: noble
+          - os: ubuntu-22.04
+            ros_distro: humble
+            deb_codename: jammy
+
+    name: Package ${{ matrix.ros_distro }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    env:
+      PACKAGE_INPUT_ID: ${{ needs.build-and-test.outputs[format('artifact_id_{0}', matrix.ros_distro)] }}
+
+    steps:
+      - name: Validate package input ID
+        shell: bash
+        run: '[[ "${PACKAGE_INPUT_ID}" =~ ^[1-9][0-9]*$ ]]'
+
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ env.PACKAGE_INPUT_ID }}
+          path: dist
+          merge-multiple: true
+
+      - name: Verify package handoff
+        shell: bash
+        run: |
+          shopt -s nullglob
+          zip_files=(dist/ContactGloveSDKv2ROS2-*-${{ matrix.ros_distro }}-*.zip)
+          test "${#zip_files[@]}" -eq 1
+          test "$(wc -l < dist/SHA256SUMS)" -eq 1
+          (cd dist && sha256sum --strict --check SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contactglove-ros2-bridge-${{ matrix.ros_distro }}
+          path: dist/ContactGloveSDKv2ROS2-*-${{ matrix.ros_distro }}-*.zip
+          if-no-files-found: error

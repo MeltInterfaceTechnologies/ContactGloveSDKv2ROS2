@@ -1,0 +1,79 @@
+<launch>
+  <arg name="namespace"     default="contact_glove"/>
+  <!-- Normalizes values with leading/trailing slashes, such as namespace:=/lab1
+       or namespace:=lab1/. Values that become empty, such as namespace:=/,
+       fall back to "contact_glove". The rule matches the corresponding let in
+       contact_glove_with_urdf.launch.xml and contact_glove::normalize_namespace()
+       in src/conversions.cpp. Use it both for this file's node namespace and
+       for the value forwarded to the unnormalizing contact_glove.launch.xml driver. -->
+  <let name="namespace_clean"
+       value="$(eval &quot;'$(var namespace)'.strip('/') or 'contact_glove'&quot;)"/>
+  <arg name="ds_ip"            default="127.0.0.1"/>
+  <arg name="ds_port"          default="25791"/>
+  <arg name="receive_port"     default="25788"/>
+  <arg name="send_port"        default="0"/>
+  <arg name="timeout_duration" default="1000"/>
+  <arg name="retarget_profile_timeout_ms" default="1000"/>
+  <arg name="try_reconnect"    default="true"/>
+  <arg name="parent_frame_id"  default="world"/>
+  <arg name="enable_rviz2"     default="true"/>
+  <arg name="publish_placeholder_wrist_tf" default="true"/>
+  <arg name="publish_joint_tf" default="false"/>
+  <arg name="marker_lifetime"  default="0.4"/>
+
+  <!-- Fixes the glove ID represented by left/joint_states or right/joint_states
+       when multiple gloves are connected on one side. The default empty value
+       selects automatically. See the identically named contact_glove.launch.xml
+       and contact_glove_node parameters. -->
+  <arg name="left_joint_state_glove_id"  default=""/>
+  <arg name="right_joint_state_glove_id" default=""/>
+
+  <!-- Manual ownership switch for whether this launch file starts the SDK driver
+       contact_glove_node. It does not prevent duplicate starts automatically:
+       choose exactly one owner for the driver. The default true starts it here.
+       If another launch file, such as contact_glove_with_urdf.launch.xml,
+       already starts a driver in the same namespace, leaving both true starts
+       two drivers and causes a UDP bind conflict on receive_port (25788 by
+       default). Set this to start_driver:=false to subscribe only to the
+       existing driver's topics. To use MarkerArray/25-joint TF and URDF plus
+       JointState together, use contact_glove_with_urdf_and_rviz.launch.xml,
+       which starts the driver exactly once. -->
+  <arg name="start_driver" default="true"/>
+
+  <!-- SDK driver -->
+  <group if="$(var start_driver)">
+    <include file="$(find-pkg-share contact_glove)/launch/contact_glove.launch.xml">
+      <arg name="namespace"    value="$(var namespace_clean)"/>
+      <arg name="ds_ip"            value="$(var ds_ip)"/>
+      <arg name="ds_port"          value="$(var ds_port)"/>
+      <arg name="receive_port"     value="$(var receive_port)"/>
+      <arg name="send_port"        value="$(var send_port)"/>
+      <arg name="timeout_duration" value="$(var timeout_duration)"/>
+      <arg name="retarget_profile_timeout_ms" value="$(var retarget_profile_timeout_ms)"/>
+      <arg name="try_reconnect"    value="$(var try_reconnect)"/>
+      <arg name="left_joint_state_glove_id"  value="$(var left_joint_state_glove_id)"/>
+      <arg name="right_joint_state_glove_id" value="$(var right_joint_state_glove_id)"/>
+    </include>
+  </group>
+
+  <!-- Skeleton → MarkerArray + TF broadcaster -->
+  <node pkg="contact_glove" exec="contact_glove_rviz_node"
+        name="contact_glove_rviz_node" namespace="$(var namespace_clean)" output="screen">
+    <param name="parent_frame_id" value="$(var parent_frame_id)"/>
+    <param name="publish_placeholder_wrist_tf" value="$(var publish_placeholder_wrist_tf)"/>
+    <param name="publish_joint_tf" value="$(var publish_joint_tf)"/>
+    <param name="marker_lifetime" value="$(var marker_lifetime)"/>
+    <!-- Side-by-side placeholder positions (parent_frame_id coordinates).
+         Defaults separate the hands by 0.30 m along the Y axis.
+         Override per-axis to match your RViz camera, e.g.:
+           <param name="left_wrist_offset"  value="-0.15 0.0 0.0" value-sep=" "/>
+           <param name="right_wrist_offset" value="0.15 0.0 0.0"  value-sep=" "/> -->
+    <param name="left_wrist_offset"  value="0.0 -0.15 0.0" value-sep=" "/>
+    <param name="right_wrist_offset" value="0.0 0.15 0.0"  value-sep=" "/>
+  </node>
+
+  <!-- RViz2 with preset config -->
+  <node pkg="rviz2" exec="rviz2" name="rviz2" namespace="$(var namespace_clean)" output="screen"
+        args="-d $(find-pkg-share contact_glove)/config/contact_glove.rviz"
+        if="$(var enable_rviz2)"/>
+</launch>

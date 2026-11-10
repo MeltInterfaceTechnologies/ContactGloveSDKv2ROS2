@@ -1,0 +1,30 @@
+<launch>
+  <arg name="namespace"     default="contact_glove"/>
+  <arg name="ds_ip"           default="127.0.0.1"/>
+  <arg name="ds_port"         default="25791"/>
+  <arg name="receive_port"    default="25788"/>
+  <arg name="send_port"       default="0"/>
+  <arg name="timeout_duration" default="1000"/>
+  <arg name="retarget_profile_timeout_ms" default="1000"/>
+  <arg name="try_reconnect"   default="true"/>
+
+  <!-- Fixes the glove ID represented by left/joint_states or right/joint_states
+       when multiple gloves are connected on one side. The default empty value
+       automatically selects the first glove received on that side. See the
+       contact_glove_node parameters and the API reference JointState + URDF section. -->
+  <arg name="left_joint_state_glove_id"  default=""/>
+  <arg name="right_joint_state_glove_id" default=""/>
+
+  <node pkg="contact_glove" exec="contact_glove_node"
+        name="contact_glove_node" namespace="$(var namespace)" output="screen">
+    <param name="ds_ip"            value="$(var ds_ip)"/>
+    <param name="ds_port"          value="$(var ds_port)"/>
+    <param name="receive_port"     value="$(var receive_port)"/>
+    <param name="send_port"        value="$(var send_port)"/>
+    <param name="timeout_duration" value="$(var timeout_duration)"/>
+    <param name="retarget_profile_timeout_ms" value="$(var retarget_profile_timeout_ms)"/>
+    <param name="try_reconnect"    value="$(var try_reconnect)"/>
+    <param name="left_joint_state_glove_id"  value="$(var left_joint_state_glove_id)"/>
+    <param name="right_joint_state_glove_id" value="$(var right_joint_state_glove_id)"/>
+  </node>
+</launch>

@@ -1,0 +1,149 @@
+<launch>
+  <arg name="namespace"     default="contact_glove"/>
+  <!-- Normalize namespace values with leading or trailing slashes, such as
+       namespace:=/lab1 or namespace:=lab1/. All later uses remove those
+       slashes. This has two reasons: (1) tf2 rejects frame_id values with a
+       leading '/', and resulting frame_prefix/child-frame names would no
+       longer match robot_state_publisher's root link. (2) expressions such as
+       "$(var namespace)/left" would contain "//left" when namespace already
+       ends in '/', causing launch_ros namespace validation to reject the launch.
+       Values that normalize to empty, such as namespace:=/ or namespace:=//,
+       fall back to "contact_glove". This is the same rule as
+       contact_glove::normalize_namespace() in src/conversions.cpp, which
+       supplies Skeleton and Ergonomics frame_id. Keeping both rules aligned
+       prevents URDF and Skeleton TF namespace components from diverging for
+       the same input. -->
+  <let name="namespace_clean"
+       value="$(eval &quot;'$(var namespace)'.strip('/') or 'contact_glove'&quot;)"/>
+  <arg name="ds_ip"            default="127.0.0.1"/>
+  <arg name="ds_port"          default="25791"/>
+  <arg name="receive_port"     default="25788"/>
+  <arg name="send_port"        default="0"/>
+  <arg name="timeout_duration" default="1000"/>
+  <arg name="retarget_profile_timeout_ms" default="1000"/>
+  <arg name="try_reconnect"    default="true"/>
+
+  <!-- both starts both hands, left only the left hand, and right only the
+       right hand. Any other value makes both groups false so an invalid value
+       never starts both hands unexpectedly. -->
+  <arg name="hand" default="both"/>
+
+  <arg name="parent_frame_id" default="world"/>
+  <arg name="enable_rviz2"    default="true"/>
+
+  <!-- By default, publish static placement TF from parent_frame_id to
+       left_wrist/right_wrist so the model can be inspected without physical
+       wrist tracking. Set false and publish those transforms separately when
+       an external tracker supplies actual wrist 6DoF.
+
+       The left and right URDF files share one local-coordinate convention. The
+       left geometry is derived by reversing the raw right-hand bind-point Z
+       coordinates and recomputing it. With both hands at identity rotation,
+       this would display two hands facing the same direction because their
+       mirror relationship affects only local Z. Rotating only the left hand by
+       180 degrees about local X (roll=pi) makes the two hands correctly mirror
+       one another across the Y=0 plane, facing each other. -->
+  <arg name="publish_wrist_placement" default="true"/>
+  <arg name="left_wrist_offset_x"    default="0.0"/>
+  <arg name="left_wrist_offset_y"    default="-0.15"/>
+  <arg name="left_wrist_offset_z"    default="0.0"/>
+  <arg name="left_wrist_offset_roll" default="3.141592653589793"/>
+  <arg name="right_wrist_offset_x"    default="0.0"/>
+  <arg name="right_wrist_offset_y"    default="0.15"/>
+  <arg name="right_wrist_offset_z"    default="0.0"/>
+  <arg name="right_wrist_offset_roll" default="0.0"/>
+
+  <!-- Fixes the glove ID represented by left/joint_states or right/joint_states
+       when multiple gloves are connected on one side. The default empty value
+       selects automatically. See the identically named contact_glove.launch.xml
+       and contact_glove_node parameters. -->
+  <arg name="left_joint_state_glove_id"  default=""/>
+  <arg name="right_joint_state_glove_id" default=""/>
+
+  <!-- Manual ownership switch for whether this launch file starts SDK driver
+       contact_glove_node. It does not prevent duplicate starts automatically:
+       choose exactly one driver owner. The default true starts it here. If
+       another launch file, for example contact_glove_with_rviz.launch.xml,
+       already starts a driver in the same namespace, leaving both true starts
+       two drivers and causes a UDP bind conflict on receive_port (25788 by
+       default). Set start_driver:=false here to use only the existing driver's
+       topics. To use MarkerArray/25-joint TF and URDF plus JointState together,
+       use contact_glove_with_urdf_and_rviz.launch.xml, which starts the driver
+       once. -->
+  <arg name="start_driver" default="true"/>
+
+  <!-- SDK driver, including left/joint_states and right/joint_states. -->
+  <group if="$(var start_driver)">
+    <include file="$(find-pkg-share contact_glove)/launch/contact_glove.launch.xml">
+      <arg name="namespace"        value="$(var namespace_clean)"/>
+      <arg name="ds_ip"            value="$(var ds_ip)"/>
+      <arg name="ds_port"          value="$(var ds_port)"/>
+      <arg name="receive_port"     value="$(var receive_port)"/>
+      <arg name="send_port"        value="$(var send_port)"/>
+      <arg name="timeout_duration" value="$(var timeout_duration)"/>
+      <arg name="retarget_profile_timeout_ms" value="$(var retarget_profile_timeout_ms)"/>
+      <arg name="try_reconnect"    value="$(var try_reconnect)"/>
+      <arg name="left_joint_state_glove_id"  value="$(var left_joint_state_glove_id)"/>
+      <arg name="right_joint_state_glove_id" value="$(var right_joint_state_glove_id)"/>
+    </include>
+  </group>
+
+  <!-- Left hand: enabled only when hand is both or left. Nesting the node
+       namespace under "<namespace>/left" resolves relative robot_description
+       and joint_states topics to /<namespace>/left/robot_description and
+       /<namespace>/left/joint_states. The latter already matches the
+       left/joint_states published by contact_glove_node, so no remap is needed.
+
+       robot_state_publisher uses frame_prefix "<namespace>/" because a ROS 2
+       node namespace separates topic and node names only; it does not affect
+       /tf frame_id. Without frame_prefix, simultaneously running separate
+       DivingStation namespaces would publish identical URDF link names such as
+       left_wrist and left_thumb_cmc_link to /tf. Including namespace avoids
+       that collision, just as Skeleton uses
+       "ds2/<namespace>/<glove_id>/wrist". static_transform_publisher uses the
+       same prefix on child-frame-id so it matches the root link expected by
+       robot_state_publisher: "<namespace>/left_wrist". -->
+  <group if="$(eval &quot;'$(var hand)' == 'left' or '$(var hand)' == 'both'&quot;)">
+    <node pkg="robot_state_publisher" exec="robot_state_publisher"
+          name="robot_state_publisher" namespace="$(var namespace_clean)/left" output="screen">
+      <param name="robot_description" type="str"
+             value="$(command 'xacro $(find-pkg-share contact_glove)/urdf/left_hand.urdf.xacro')"/>
+      <param name="frame_prefix" value="$(var namespace_clean)/"/>
+    </node>
+    <node pkg="tf2_ros" exec="static_transform_publisher"
+          name="left_wrist_placement_tf" namespace="$(var namespace_clean)"
+          args="--x $(var left_wrist_offset_x) --y $(var left_wrist_offset_y)
+                --z $(var left_wrist_offset_z) --roll $(var left_wrist_offset_roll)
+                --frame-id $(var parent_frame_id) --child-frame-id $(var namespace_clean)/left_wrist"
+          if="$(var publish_wrist_placement)"/>
+  </group>
+
+  <!-- Right hand: enabled only when hand is both or right. It follows the same
+       design as the left hand, including the frame_prefix rationale. -->
+  <group if="$(eval &quot;'$(var hand)' == 'right' or '$(var hand)' == 'both'&quot;)">
+    <node pkg="robot_state_publisher" exec="robot_state_publisher"
+          name="robot_state_publisher" namespace="$(var namespace_clean)/right" output="screen">
+      <param name="robot_description" type="str"
+             value="$(command 'xacro $(find-pkg-share contact_glove)/urdf/right_hand.urdf.xacro')"/>
+      <param name="frame_prefix" value="$(var namespace_clean)/"/>
+    </node>
+    <node pkg="tf2_ros" exec="static_transform_publisher"
+          name="right_wrist_placement_tf" namespace="$(var namespace_clean)"
+          args="--x $(var right_wrist_offset_x) --y $(var right_wrist_offset_y)
+                --z $(var right_wrist_offset_z) --roll $(var right_wrist_offset_roll)
+                --frame-id $(var parent_frame_id) --child-frame-id $(var namespace_clean)/right_wrist"
+          if="$(var publish_wrist_placement)"/>
+  </group>
+
+  <!-- RViz2 preset for URDF RobotModel display. -f sets Fixed Frame to
+       parent_frame_id; the config/contact_glove_urdf.rviz Views target frame
+       is "<Fixed Frame>" and follows it. The bundled RViz RobotModel TF Prefix
+       is "contact_glove" for the default namespace. When using namespace:=...,
+       manually set RViz TF Prefix to namespace_clean without a trailing slash.
+       TF Prefix is a literal value in the RViz file and cannot use ROS launch
+       substitution. -->
+  <node pkg="rviz2" exec="rviz2" name="rviz2" namespace="$(var namespace_clean)" output="screen"
+        args="-d $(find-pkg-share contact_glove)/config/contact_glove_urdf.rviz
+              -f $(var parent_frame_id)"
+        if="$(var enable_rviz2)"/>
+</launch>
