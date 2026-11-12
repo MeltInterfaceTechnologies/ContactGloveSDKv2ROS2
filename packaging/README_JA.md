@@ -2,6 +2,8 @@
 
 [English](README.md) | 日本語
 
+このREADMEでは配布ZIPからの導入を説明します。APTを利用する場合は、共通の[リポジトリの初回設定](https://docs.melt-interface-technologies.com/ja/docs/contact/sdks/apt-repository)を行い、[ROS2の導入・更新ガイド](https://docs.melt-interface-technologies.com/ja/docs/contact/sdks/contact-glove-v2-ros2#aptからインストールする)を参照してください。
+
 ## 必要環境
 
 - 対応機種: ContactGlove3 Pro。
@@ -9,7 +11,7 @@
 - ROS2とそのAPTリポジトリを設定済みであること。OSとROS2に合うZIPを使用します。ARM64や他のOS・ROS2は、この配布物の対象外です。
 - 配信側にはDivingStation v2以降と同梱C++ランタイム1.0.0が必要です。購読専用の環境では、DivingStationとC++ランタイムは不要です。
 
-## インストールと起動
+## ZIPからのインストールと起動
 
 ZIPを展開したディレクトリから実行します。グローブのデータを配信する環境には、3つのローカルDEBを明示してインストールします。
 
@@ -38,8 +40,8 @@ ros2 launch contact_glove contact_glove.launch.xml
 
 ## Webドキュメント
 
-- [SDKガイド](https://docs.melt-interface-technologies.com/ja/docs/contact/sdks/contact-glove-v2-ros2)
-- [ユーザーマニュアル](https://docs.melt-interface-technologies.com/ja/docs/contact/sdks/contact-glove-v2-ros2/user-manual): 更新、ZIPのoverlay利用、接続、可視化、トラブル対応
+- [SDKガイド](https://docs.melt-interface-technologies.com/ja/docs/contact/sdks/contact-glove-v2-ros2): APT・ZIPからの導入、更新、ZIPのoverlay利用
+- [ユーザーマニュアル](https://docs.melt-interface-technologies.com/ja/docs/contact/sdks/contact-glove-v2-ros2/user-manual): 接続、可視化、トラブル対応
 - [APIリファレンス](https://docs.melt-interface-technologies.com/ja/docs/contact/sdks/contact-glove-v2-ros2/api)
 
 Apache-2.0です。ライセンスと第三者コンポーネントの条件は、同梱の `LICENSE.md`、`NOTICE.md`、`THIRD_PARTY_NOTICES.md` を参照してください。

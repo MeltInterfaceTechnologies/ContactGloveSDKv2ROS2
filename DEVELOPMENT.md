@@ -82,6 +82,7 @@ sudo apt update
 sudo apt install -y \
   build-essential \
   cmake \
+  file \
   git \
   python3-colcon-common-extensions \
   ros-jazzy-rclcpp \
@@ -205,6 +206,33 @@ For lint configuration, see `src/contact_glove/CMakeLists.txt` and
 
 GitHub Actions (`.github/workflows/ci.yml`) runs `colcon build` and `colcon test` on both
 Jazzy and Humble.
+
+### CI ROS setup policy
+
+`scripts/setup_ros_ci.sh` prepares the Ubuntu 22.04/Humble and Ubuntu 24.04/Jazzy
+amd64 runners. It uses the official [ROS APT source package](https://github.com/ros-infrastructure/ros-apt-source)
+with a pinned version and SHA-256 for each Ubuntu release. To update this bootstrap,
+review the release assets, change both checksums with the version, and run both CI jobs.
+The setup retains `ros-<distro>-desktop`, installs `ros-dev-tools` and build tools,
+and leaves the project-specific dependency list in the workflow.
+
+The [Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)
+and [Jazzy](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
+guides recommend updating the OS. This CI helper deliberately omits system-wide
+APT upgrades on current, disposable GitHub-hosted runners. Named packages and
+their dependencies can still be updated by `apt-get install`; package versions
+are not a complete environment lock. Installs refuse package removals, and an
+incomplete APT index or failed download stops setup instead of continuing with
+stale indexes or falling back to an OS upgrade. This is not a general installer
+for old or self-hosted systems; the Humble guide warns about early Jammy
+systemd/udev packages.
+
+`ros-tooling/setup-ros@v0.7` has no skip-upgrade input and upgrades Jammy.
+Its Noble path already skips that operation. A local helper keeps this policy
+reviewable without replacing the existing build, test, packaging, and fresh
+consumer-container checks. The command-recording regression tests run with
+`python3 -m unittest discover -s scripts -p 'test_setup_ros_ci.py' -v` without
+root access or network; the real install is validated by the Humble/Jazzy jobs.
 
 ### Test without hardware (mock server)
 

@@ -82,6 +82,7 @@ sudo apt update
 sudo apt install -y \
   build-essential \
   cmake \
+  file \
   git \
   python3-colcon-common-extensions \
   ros-jazzy-rclcpp \
@@ -204,6 +205,30 @@ timeout 45s python3 scripts/test_lan_retry.py \
 
 GitHub Actions（`.github/workflows/ci.yml`）が Jazzy / Humble
 の両方で `colcon build` + `colcon test` を実行します。
+
+### CIでのROS導入方針
+
+`scripts/setup_ros_ci.sh` はUbuntu 22.04/HumbleとUbuntu 24.04/Jazzyの
+amd64ランナー用です。公式の[ROS APT sourceパッケージ](https://github.com/ros-infrastructure/ros-apt-source)を、
+バージョンとUbuntuごとのSHA-256を固定して導入します。更新時はリリースの配布物を確認し、
+バージョンと両方のチェックサムを更新したうえで、両環境のCIを実行してください。
+従来の `ros-<distro>-desktop` を維持し、`ros-dev-tools` とビルドツールを導入します。
+プロジェクト固有の依存パッケージは引き続きworkflowに明示します。
+
+公式の[Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)・
+[Jazzy](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)ガイドはOSの更新を推奨していますが、
+このCIでは更新済みの使い捨てGitHub-hostedランナーを前提に、OS全体のAPT upgradeを省きます。
+`apt-get install` による指定パッケージとその依存関係の更新は許容するため、環境全体の
+バージョンを固定する仕組みではありません。パッケージ削除が必要な導入は拒否します。
+APT一覧の一部取得失敗やダウンロード失敗はエラーとし、古い一覧で続行したり、
+OS全体のupgradeで回復を試みたりしません。古いOSやself-hosted環境向けの汎用インストーラーではなく、
+Humbleの公式ガイドにある初期Jammyのsystemd/udev問題にも注意が必要です。
+
+`ros-tooling/setup-ros@v0.7` にはupgradeを無効にする入力がなく、Jammyではupgradeを実行します。
+Nobleではもともとこの処理を省いています。小さな導入スクリプトに置き換えることで、
+既存のビルド・試験・パッケージ作成・新規コンテナでの利用者側検証を変えずに、導入方針を確認できます。
+`python3 -m unittest discover -s scripts -p 'test_setup_ros_ci.py' -v` はコマンドを記録する
+回帰テストで、root権限もネットワークも使いません。実際の導入はHumble/JazzyのCIで検証します。
 
 ### 実機なし（モックサーバー）での動作確認
 

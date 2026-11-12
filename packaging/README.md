@@ -2,6 +2,8 @@
 
 English | [日本語](README_JA.md)
 
+This README covers installation from the distribution ZIP. For APT, start with the shared [repository setup](https://docs.melt-interface-technologies.com/en/docs/contact/sdks/apt-repository), then follow the [ROS2 installation and update guide](https://docs.melt-interface-technologies.com/en/docs/contact/sdks/contact-glove-v2-ros2#install-from-apt).
+
 ## Requirements
 
 - Supported hardware: ContactGlove3 Pro.
@@ -9,7 +11,7 @@ English | [日本語](README_JA.md)
 - Configure ROS 2 and its APT repository first. Use the ZIP matching the OS and ROS 2 distribution; ARM64 and other OS/ROS 2 versions are outside this distribution's scope.
 - Publishing requires DivingStation v2 or later and the bundled C++ runtime 1.0.0. Subscriber-only systems require neither DivingStation nor the C++ runtime.
 
-## Install and start
+## Install from the ZIP and start
 
 Run from the extracted ZIP directory. To publish glove data, install all three local DEBs:
 
@@ -38,8 +40,8 @@ On a subscriber-only system, source ROS 2 without launching the bridge or sourci
 
 ## Web documentation
 
-- [SDK guide](https://docs.melt-interface-technologies.com/en/docs/contact/sdks/contact-glove-v2-ros2)
-- [User Manual](https://docs.melt-interface-technologies.com/en/docs/contact/sdks/contact-glove-v2-ros2/user-manual): upgrades, ZIP overlay use, connections, visualization, and troubleshooting.
+- [SDK guide](https://docs.melt-interface-technologies.com/en/docs/contact/sdks/contact-glove-v2-ros2): APT and ZIP installation, upgrades, and ZIP overlay use.
+- [User Manual](https://docs.melt-interface-technologies.com/en/docs/contact/sdks/contact-glove-v2-ros2/user-manual): connections, visualization, and troubleshooting.
 - [API reference](https://docs.melt-interface-technologies.com/en/docs/contact/sdks/contact-glove-v2-ros2/api)
 
 Apache-2.0. See the bundled `LICENSE.md`, `NOTICE.md`, and `THIRD_PARTY_NOTICES.md` for license and third-party terms.
